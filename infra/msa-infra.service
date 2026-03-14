@@ -1,0 +1,15 @@
+[Unit]
+Description=MSA Shop Infrastructure (postgres, redis, zookeeper, kafka)
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/hada1/ServiceMesh
+ExecStart=/usr/bin/docker compose up -d postgres redis zookeeper kafka
+ExecStop=/usr/bin/docker compose stop postgres redis zookeeper kafka
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

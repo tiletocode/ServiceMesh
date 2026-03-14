@@ -46,7 +46,7 @@ echo "[4] SKU 추가 (재고 50개)..."
 SKU=$(curl -s -X POST "$BASE_PRODUCT/products/$PRODUCT_ID/skus" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d "{\"skuCode\":\"GALAXY-NB-001\",\"optionName\":\"실버/16GB\",\"initialStock\":50}")
+  -d "{\"skuCode\":\"GALAXY-NB-001\",\"optionName\":\"실버/16GB\",\"salesPrice\":1500000,\"initialStock\":50}")
 SKU_ID=$(echo $SKU | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 echo "   skuId: $SKU_ID"
 

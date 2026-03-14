@@ -9,6 +9,7 @@ interface ShipmentRepository {
     fun save(shipment: Shipment): Shipment
     fun findById(id: Long): Optional<Shipment>
     fun findByOrderId(orderId: Long): Optional<Shipment>
+    fun findByOrderNumber(orderNumber: String): Optional<Shipment>
     fun findByTrackingNumber(trackingNumber: String): Optional<Shipment>
     fun findByMemberId(memberId: Long, pageable: Pageable): Page<Shipment>
 }

@@ -114,4 +114,16 @@ class ShippingApplicationService(
             .orElseThrow { RuntimeException("배송 정보를 찾을 수 없습니다. trackingNumber=$trackingNumber") }
         return shipment.toView()
     }
+
+    @Transactional(readOnly = true)
+    fun getShipmentByOrderNumber(orderNumber: String): ShipmentView {
+        val shipment = shipmentRepository.findByOrderNumber(orderNumber)
+            .orElseThrow { RuntimeException("배송 정보를 찾을 수 없습니다. orderNumber=$orderNumber") }
+        return shipment.toView()
+    }
+
+    @Transactional(readOnly = true)
+    fun getShipmentsByMember(memberId: Long, pageable: org.springframework.data.domain.Pageable): org.springframework.data.domain.Page<ShipmentView> {
+        return shipmentRepository.findByMemberId(memberId, pageable).map { it.toView() }
+    }
 }

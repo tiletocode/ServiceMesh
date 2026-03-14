@@ -70,3 +70,93 @@
 주요 기능: '결제 완료' 이벤트 수신, 배송 요청 생성(출고 지시), 송장 번호 발급 및 배송 상태 추적.
 경계: '배송'은 주문이 '얼마에' 결제되었는지(Payment) 관심 없다. 오직 '배송할 주문 항목'과 '배송지 주소'에만 집중한다.
 결과: shipping-service (배송 마이크로서비스)
+
+---
+
+## 프론트엔드 구현 현황
+
+### 구조
+- **단일 파일 SPA**: `member-service/src/main/resources/static/index.html`
+  - Bootstrap 5 + Vanilla JS
+  - nginx(8080)을 통해 `/`로 서빙
+  - 로그인 후 JWT를 `localStorage`에 저장, 모든 API 요청에 `Authorization: Bearer` 헤더 사용
+
+### 화면 구성 (섹션별)
+1. **회원 섹션** – 회원 가입 / 로그인
+2. **상품 섹션** – 상품+SKU 목록 조회, 상품 등록, SKU 등록
+3. **주문 섹션** – 주문 생성, 주문 목록 (`size=100&sort=id,desc`)
+4. **배송 섹션** – 내 배송 목록 전체 조회, 주문별 배송 조회
+
+### 주요 JS 함수
+| 함수 | 역할 |
+|------|------|
+| `login()` | 로그인 후 JWT 저장, 네비게이션 버튼 노출 |
+| `loadOrders()` | `GET /api/v1/orders?size=100&sort=id,desc` 호출, 주문 카드 렌더링 |
+| `loadShipments()` | `GET /api/v1/shipments/my` 호출, 배송 목록 카드 렌더링 |
+| `lookupShipmentByOrder(orderId)` | 주문 카드의 [배송조회] 버튼 → 해당 주문의 배송 정보 표시 |
+| `fillShipmentCard(shipment)` | 배송 상태·송장번호·송장사 렌더링 |
+| `fillTrackingAndSearch(trackingNumber, carrier)` | 송장번호 표시 및 조회 버튼 활성화 |
+| `confirmReset()` | confirm 팝업 후 `resetAll()` 호출 |
+| `resetAll()` | shipping→payment→order→product→member 순으로 `POST /api/v1/admin/reset/{service}` 호출 후 자동 로그아웃 |
+
+### 주문 카드 표시 내용
+- 주문 ID, 상태 (PENDING/PAID/CANCELLED 배지)
+- **취소 사유 (`cancelReason`)**: CANCELLED 상태일 때 빨간 텍스트로 사유 표시
+  - 사용자 직접 취소: "사용자 직접 취소"
+  - 결제 실패(Kafka 이벤트): `event.failureReason ?: "결제 실패"`
+- 주문 항목(SKU명, 수량, 금액)
+- [배송조회] / [주문취소] 버튼
+
+### 네비게이션 버튼
+- 로그인 전: 로그인/회원가입만 표시
+- 로그인 후: 상품/주문/배송/로그아웃/**데이터 초기화(빨간)** 버튼 표시
+
+---
+
+## 인프라 / DevOps 현황
+
+### Docker Compose 구성
+- 포트: nginx:8080, member:8081, product:8082, order:8083, payment:8084, shipping:8085
+- `postgres_data` named volume → 컨테이너 재시작 후에도 DB 데이터 영구 보존
+- Kafka + Zookeeper (SAGA 이벤트 브로커)
+- Redis (product-service 캐시용)
+
+### nginx (`infra/nginx/nginx.conf`) 핵심 설정
+```nginx
+resolver 127.0.0.11 valid=5s ipv6=off;  # Docker 내부 DNS, IP 캐시 502 방지
+# 각 location에서 set $upstream http://서비스명:포트 방식으로 동적 재조회
+```
+- 어드민 리셋 라우팅: `/api/v1/admin/reset/{member|product|order|payment|shipping}`
+
+### start.sh `--restart` 옵션
+서비스 재시작 안전 순서: kafka 중지 → zookeeper 중지 → zookeeper 시작(8초 대기) → kafka 시작(10초 대기) → 서비스 시작 → nginx restart
+- Kafka `NodeExists` 오류 방지 (ZooKeeper 스테일 에페메럴 노드)
+
+### Redis PageImpl 캐시 이슈 (해결 완료)
+- `@Cacheable` 페이지 쿼리에서 제거 (`getOnSaleProducts()`)
+- `RedisCacheConfig.kt`에 `@EventListener(ApplicationReadyEvent)` 추가 → 서비스 시작 시 캐시 자동 초기화
+
+---
+
+## AdminResetController (5개 서비스 공통)
+- 엔드포인트: `POST /api/v1/admin/reset`
+- `deleteAll()` 후 삭제 건수 반환
+- member: `MemberJpaRepository`, product: `ProductJpaRepository` + `SkuJpaRepository`, order: `OrderJpaRepository`, payment: `PaymentJpaRepository`, shipping: `ShipmentJpaRepository`
+- **주의**: member-service의 `MemberRepository`(커스텀 인터페이스)에는 `deleteAll()` 없음 → `MemberJpaRepository` 직접 주입 필요
+
+---
+
+## 결제 시뮬레이션 규칙
+- 주문 금액 **≤ 100만원**: APPROVE → 주문 PAID + 배송 생성
+- 주문 금액 **> 100만원**: FAIL → 주문 CANCELLED (취소 사유: Kafka `failureReason`)
+
+---
+
+## 주요 해결 이력
+| 문제 | 해결 |
+|------|------|
+| nginx 재시작 후 502 (IP 캐시) | `resolver 127.0.0.11` + `set $upstream` 변수 방식 |
+| Kafka `NodeExists` 오류 | start.sh에서 ZK→Kafka 순서 재시작 |
+| Redis `PageImpl` 역직렬화 500 | `@Cacheable` 제거 + 시작 시 캐시 초기화 |
+| 주문 목록 10개만 표시 | `?size=100&sort=id,desc` 파라미터 추가 |
+| CANCELLED 사유 구별 불가 | `cancelReason` DB 컬럼(V2 Flyway) + 백엔드 + UI |

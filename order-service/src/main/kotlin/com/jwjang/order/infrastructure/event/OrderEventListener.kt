@@ -38,7 +38,7 @@ class OrderEventListener(
             orderRepository.save(order)
             log.info("Order marked as PAID: orderNumber=${order.orderNumber}")
         } else {
-            order.cancel()
+            order.cancel(event.failureReason ?: "결제 실패")
             orderRepository.save(order)
             orderEventPublisher.publishOrderCancelled(order.id!!, order.orderNumber)
             log.warn("Order cancelled due to payment failure: orderNumber=${order.orderNumber}, reason=${event.failureReason}")

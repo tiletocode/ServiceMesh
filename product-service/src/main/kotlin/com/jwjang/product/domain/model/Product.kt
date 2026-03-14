@@ -96,6 +96,9 @@ class Sku(
     @Column(nullable = false, length = 255)
     val optionName: String,  // 예: "S/Blue", "M/Red"
 
+    @Column(nullable = false, precision = 15, scale = 2)
+    var salesPrice: BigDecimal,
+
     @Column(nullable = false)
     var stockQuantity: Int = 0,
 

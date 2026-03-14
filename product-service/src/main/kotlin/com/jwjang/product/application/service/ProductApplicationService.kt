@@ -28,6 +28,7 @@ data class AddSkuCommand(
     val productId: Long,
     val skuCode: String,
     val optionName: String,
+    val salesPrice: BigDecimal,
     val initialStock: Int = 0
 )
 
@@ -57,7 +58,9 @@ data class SkuView(
     @com.fasterxml.jackson.annotation.JsonProperty("id") val id: Long,
     @com.fasterxml.jackson.annotation.JsonProperty("skuCode") val skuCode: String,
     @com.fasterxml.jackson.annotation.JsonProperty("optionName") val optionName: String,
-    @com.fasterxml.jackson.annotation.JsonProperty("stockQuantity") val stockQuantity: Int
+    @com.fasterxml.jackson.annotation.JsonProperty("salesPrice") val salesPrice: BigDecimal,
+    @com.fasterxml.jackson.annotation.JsonProperty("stockQuantity") val stockQuantity: Int,
+    @com.fasterxml.jackson.annotation.JsonProperty("productName") val productName: String? = null
 )
 
 fun Product.toView() = ProductView(
@@ -75,7 +78,9 @@ fun Sku.toView() = SkuView(
     id = id!!,
     skuCode = skuCode,
     optionName = optionName,
-    stockQuantity = stockQuantity
+    salesPrice = salesPrice,
+    stockQuantity = stockQuantity,
+    productName = product.name
 )
 
 /**
@@ -113,6 +118,7 @@ class ProductApplicationService(
             product = product,
             skuCode = command.skuCode,
             optionName = command.optionName,
+            salesPrice = command.salesPrice,
             stockQuantity = command.initialStock
         )
         product.addSku(sku)
@@ -146,8 +152,8 @@ class ProductApplicationService(
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(cacheNames = ["products"])
     fun getOnSaleProducts(pageable: Pageable): Page<ProductView> {
+        // Page<PageImpl> 은 Redis 역직렬화 불가 → 캐시 제외, DB 직접 조회
         return productRepository.findAllByIsOnSaleTrue(pageable).map { it.toView() }
     }
 

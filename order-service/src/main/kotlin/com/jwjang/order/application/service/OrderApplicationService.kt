@@ -33,6 +33,7 @@ data class OrderView(
     val orderNumber: String,
     val memberId: Long,
     val status: OrderStatus,
+    val cancelReason: String?,
     val totalAmount: BigDecimal,
     val shippingAddress: String,
     val orderLines: List<OrderLineView>,
@@ -53,6 +54,7 @@ fun Order.toView() = OrderView(
     orderNumber = orderNumber,
     memberId = memberId,
     status = status,
+    cancelReason = cancelReason,
     totalAmount = totalAmount,
     shippingAddress = shippingAddress,
     orderLines = orderLines.map {
@@ -171,7 +173,7 @@ class OrderApplicationService(
         val order = orderRepository.findById(orderId)
             .orElseThrow { OrderNotFoundException(orderId) }
 
-        order.cancel()
+        order.cancel("사용자 직접 취소")
         orderRepository.save(order)
 
         // 재고 복구

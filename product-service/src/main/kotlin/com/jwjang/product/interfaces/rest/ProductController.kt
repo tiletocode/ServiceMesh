@@ -51,6 +51,7 @@ class ProductController(
             productId = productId,
             skuCode = request.skuCode,
             optionName = request.optionName,
+            salesPrice = request.salesPrice,
             initialStock = request.initialStock
         )
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -95,6 +96,7 @@ data class CreateProductRequest(
 data class AddSkuRequest(
     val skuCode: String,
     val optionName: String,
+    val salesPrice: BigDecimal,
     val initialStock: Int = 0
 )
 

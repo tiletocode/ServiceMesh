@@ -29,6 +29,7 @@
   <span class="navbar-brand"><i class="bi bi-box-seam-fill me-2"></i>MSA Shop</span>
   <div class="ms-auto d-flex align-items-center gap-3">
     <span id="nav-user" class="text-white-50 small"></span>
+    <button id="btn-reset" class="btn btn-sm btn-outline-danger d-none" onclick="confirmReset()"><i class="bi bi-trash me-1"></i>데이터 초기화</button>
     <button id="btn-logout" class="btn btn-sm btn-outline-light d-none" onclick="logout()">로그아웃</button>
   </div>
 </nav>
@@ -147,7 +148,7 @@
           </div>
         </div>
         <div class="card-body p-0">
-          <div id="order-list" class="p-3 text-muted small">주문 목록을 불러오려면 새로고침을 누르세요.</div>
+          <div id="order-list" class="p-3 text-muted small" style="max-height:520px;overflow-y:auto">주문 목록을 불러오려면 새로고침을 누르세요.</div>
         </div>
       </div>
     </div>
@@ -173,6 +174,17 @@
         </div>
       </div>
     </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-truck me-2"></i>내 배송 목록</span>
+          <button class="btn btn-sm btn-outline-primary" onclick="loadShipments()"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        <div class="card-body p-0">
+          <div id="shipment-list" class="p-3 text-muted small">새로고침을 눌러 배송 목록을 불러오세요.</div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -182,11 +194,11 @@
 
 <script>
 const API = {
-  member:   'http://localhost:8081',
-  product:  'http://localhost:8082',
-  order:    'http://localhost:8083',
-  payment:  'http://localhost:8084',
-  shipping: 'http://localhost:8085',
+  member:   '',
+  product:  '',
+  order:    '',
+  payment:  '',
+  shipping: '',
 };
 
 let token = localStorage.getItem('token') || '';
@@ -210,6 +222,7 @@ function onLoginSuccess(data) {
   localStorage.setItem('memberEmail', memberEmail);
   document.getElementById('nav-user').textContent = `${memberEmail} (ID:${memberId})`;
   document.getElementById('btn-logout').classList.remove('d-none');
+  document.getElementById('btn-reset').classList.remove('d-none');
   document.querySelectorAll('.auth-required').forEach(el => el.classList.remove('d-none'));
 }
 
@@ -218,9 +231,27 @@ function logout() {
   localStorage.clear();
   document.getElementById('nav-user').textContent = '';
   document.getElementById('btn-logout').classList.add('d-none');
+  document.getElementById('btn-reset').classList.add('d-none');
+  document.getElementById('btn-reset').classList.add('d-none');
   document.querySelectorAll('.auth-required').forEach(el => el.classList.add('d-none'));
   showSection('auth');
   toast('로그아웃되었습니다.', 'secondary');
+}
+
+function confirmReset() {
+  if (!confirm('⚠️ 모든 데이터(회원/상품/SKU/주문/결제/배송)가 삭제됩니다.\n정말 초기화하시겠습니까?')) return;
+  resetAll();
+}
+
+async function resetAll() {
+  const services = ['member', 'product', 'order', 'payment', 'shipping'];
+  const results = [];
+  for (const svc of services) {
+    const r = await fetch(`/api/v1/admin/reset/${svc}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    results.push(`${svc}: ${r.ok ? 'OK' : 'FAIL(' + r.status + ')'}`);
+  }
+  toast('초기화 완료: ' + results.join(', '), 'warning', 5000);
+  logout();
 }
 
 // ── 섹션 전환 ──────────────────────────────
@@ -296,7 +327,7 @@ async function createProduct() {
   const r = await api('product', 'POST', '/api/v1/products', {
     name: document.getElementById('p-name').value,
     description: document.getElementById('p-desc').value,
-    basePrice: parseFloat(document.getElementById('p-price').value),
+    salesPrice: parseFloat(document.getElementById('p-price').value),
     category: document.getElementById('p-category').value,
   });
   showResp('p-resp', r.data);
@@ -310,7 +341,7 @@ async function addSku() {
   const r = await api('product', 'POST', `/api/v1/products/${pid}/skus`, {
     skuCode: document.getElementById('sku-code').value,
     optionName: document.getElementById('sku-option').value,
-    price: parseFloat(document.getElementById('sku-price').value),
+    salesPrice: parseFloat(document.getElementById('sku-price').value),
     initialStock: parseInt(document.getElementById('sku-stock').value),
   });
   showResp('sku-resp', r.data);
@@ -322,7 +353,7 @@ async function loadProducts() {
   const r = await api('product', 'GET', '/api/v1/products');
   const el = document.getElementById('product-list');
   if (!r.ok) { el.innerHTML = `<p class="text-danger p-3">불러오기 실패: ${r.data?.message || r.status}</p>`; return; }
-  const items = Array.isArray(r.data) ? r.data : [r.data];
+  const items = r.data?.content ?? (Array.isArray(r.data) ? r.data : [r.data]);
   if (!items.length) { el.innerHTML = '<p class="text-muted p-3">등록된 상품이 없습니다.</p>'; return; }
   el.innerHTML = items.map(p => `
     <div class="border-bottom p-3">
@@ -330,10 +361,10 @@ async function loadProducts() {
         <strong>[${p.id}] ${p.name}</strong>
         <span class="text-muted small">${p.category || ''}</span>
       </div>
-      <div class="text-muted small">${p.description || ''} | 기본가: ${(p.basePrice||0).toLocaleString()}원</div>
+      <div class="text-muted small">${p.description || ''} | 판매가: ${(p.salesPrice||0).toLocaleString()}원</div>
       ${(p.skus||[]).map(s => `
         <div class="ms-3 mt-1 small text-secondary">
-          • SKU ${s.id}: ${s.skuCode} (${s.optionName}) — ${(s.price||0).toLocaleString()}원 | 재고: <strong>${s.stockQuantity}</strong>
+          • SKU ${s.id}: ${s.skuCode} (${s.optionName}) — ${s.salesPrice != null ? (s.salesPrice||0).toLocaleString()+'원' : '가격 미설정'} | 재고: <strong>${s.stockQuantity}</strong>
         </div>`).join('')}
     </div>`).join('');
 }
@@ -351,10 +382,10 @@ async function loadProductById() {
         <strong>[${p.id}] ${p.name}</strong>
         <span class="text-muted small">${p.category || ''}</span>
       </div>
-      <div class="text-muted small">${p.description || ''} | 기본가: ${(p.basePrice||0).toLocaleString()}원</div>
+      <div class="text-muted small">${p.description || ''} | 판매가: ${(p.salesPrice||0).toLocaleString()}원</div>
       ${(p.skus||[]).map(s => `
         <div class="ms-3 mt-1 small text-secondary">
-          • SKU ${s.id}: ${s.skuCode} (${s.optionName}) — ${(s.price||0).toLocaleString()}원 | 재고: <strong>${s.stockQuantity}</strong>
+          • SKU ${s.id}: ${s.skuCode} (${s.optionName}) — ${s.salesPrice != null ? (s.salesPrice||0).toLocaleString()+'원' : '가격 미설정'} | 재고: <strong>${s.stockQuantity}</strong>
         </div>`).join('')}
     </div>`;
 }
@@ -392,10 +423,10 @@ async function createOrder() {
 }
 
 async function loadOrders() {
-  const r = await api('order', 'GET', `/api/v1/orders/members/${memberId}`);
+  const r = await api('order', 'GET', `/api/v1/orders/members/${memberId}?size=100&sort=id,desc`);
   const el = document.getElementById('order-list');
   if (!r.ok) { el.innerHTML = `<p class="text-danger p-3">불러오기 실패: ${r.data?.message || r.status}</p>`; return; }
-  const items = Array.isArray(r.data) ? r.data : [r.data];
+  const items = r.data?.content ?? (Array.isArray(r.data) ? r.data : [r.data]);
   if (!items.length) { el.innerHTML = '<p class="text-muted p-3">주문 내역이 없습니다.</p>'; return; }
   el.innerHTML = items.map(o => `
     <div class="border-bottom p-3">
@@ -405,6 +436,11 @@ async function loadOrders() {
       </div>
       <div class="text-muted small mt-1">${o.shippingAddress} | 총액: ${(o.totalAmount||0).toLocaleString()}원</div>
       <div class="text-muted small">${(o.orderLines||[]).map(l => `${l.skuCode} × ${l.quantity}`).join(', ')}</div>
+      ${o.cancelReason ? `<div class="text-danger small mt-1"><i class="bi bi-exclamation-circle me-1"></i>취소 사유: ${o.cancelReason}</div>` : ''}
+      <div class="mt-1">
+        <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.75rem"
+          onclick="lookupShipmentByOrder('${o.orderNumber}')"><i class="bi bi-truck me-1"></i>배송조회</button>
+      </div>
     </div>`).join('');
 }
 
@@ -429,6 +465,53 @@ async function loadOrderById() {
 }
 
 // ── 배송 ───────────────────────────────────
+async function loadShipments() {
+  const r = await api('shipping', 'GET', `/api/v1/shipments/members/${memberId}`);
+  const el = document.getElementById('shipment-list');
+  if (!r.ok) { el.innerHTML = `<p class="text-danger p-3">${r.data?.message || '불러오기 실패'}</p>`; return; }
+  const items = r.data?.content ?? (Array.isArray(r.data) ? r.data : [r.data]);
+  if (!items.length) { el.innerHTML = '<p class="text-muted p-3">배송 내역이 없습니다. (결제 완료 후 생성됩니다)</p>'; return; }
+  el.innerHTML = items.map(s => `
+    <div class="border-bottom p-3">
+      <div class="d-flex justify-content-between align-items-center">
+        <strong>${s.orderNumber}</strong>
+        ${statusBadge(s.status)}
+      </div>
+      <div class="text-muted small mt-1">운송장: <strong class="text-primary" style="cursor:pointer" onclick="fillTrackingAndSearch('${s.trackingNumber||''}')">${s.trackingNumber||'미발급'}</strong></div>
+      <div class="text-muted small">${s.shippingAddress}</div>
+    </div>`).join('');
+}
+
+async function lookupShipmentByOrder(orderNumber) {
+  showSection('shipments');
+  const r = await api('shipping', 'GET', `/api/v1/shipments/orders/${orderNumber}`);
+  document.getElementById('shipment-resp').classList.add('d-none');
+  document.getElementById('shipment-card').classList.add('d-none');
+  if (!r.ok) {
+    const el = document.getElementById('shipment-list');
+    el.innerHTML = `<p class="text-warning p-3">${orderNumber} 배송 정보 없음 (결제 완료 전이거나 배송 준비 중입니다)</p>`;
+    return;
+  }
+  fillShipmentCard(r.data);
+  toast('배송 정보를 불러왔습니다.');
+}
+
+function fillTrackingAndSearch(trackingNumber) {
+  if (!trackingNumber) return;
+  document.getElementById('tracking-input').value = trackingNumber;
+  trackShipment();
+}
+
+function fillShipmentCard(s) {
+  document.getElementById('shipment-detail').innerHTML = `
+    <tr><th>주문번호</th><td>${s.orderNumber}</td></tr>
+    <tr><th>운송장</th><td><strong>${s.trackingNumber||'미발급'}</strong></td></tr>
+    <tr><th>상태</th><td>${statusBadge(s.status)}</td></tr>
+    <tr><th>배송지</th><td>${s.shippingAddress}</td></tr>
+    <tr><th>생성일</th><td>${new Date(s.createdAt).toLocaleString('ko-KR')}</td></tr>`;
+  document.getElementById('shipment-card').classList.remove('d-none');
+}
+
 async function trackShipment() {
   const trk = document.getElementById('tracking-input').value.trim();
   if (!trk) { toast('운송장 번호를 입력하세요.', 'warning'); return; }
@@ -436,14 +519,7 @@ async function trackShipment() {
   document.getElementById('shipment-resp').classList.add('d-none');
   document.getElementById('shipment-card').classList.add('d-none');
   if (!r.ok) { showResp('shipment-resp', r.data); toast('조회 실패', 'danger'); return; }
-  const s = r.data;
-  document.getElementById('shipment-detail').innerHTML = `
-    <tr><th>주문번호</th><td>${s.orderNumber}</td></tr>
-    <tr><th>운송장</th><td><strong>${s.trackingNumber}</strong></td></tr>
-    <tr><th>상태</th><td>${statusBadge(s.status)}</td></tr>
-    <tr><th>배송지</th><td>${s.shippingAddress}</td></tr>
-    <tr><th>생성일</th><td>${new Date(s.createdAt).toLocaleString('ko-KR')}</td></tr>`;
-  document.getElementById('shipment-card').classList.remove('d-none');
+  fillShipmentCard(r.data);
   toast('배송 정보를 불러왔습니다.');
 }
 </script>

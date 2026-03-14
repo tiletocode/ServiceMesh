@@ -22,6 +22,9 @@ class Order(
     @Column(nullable = false, length = 20)
     var status: OrderStatus = OrderStatus.PENDING,
 
+    @Column(nullable = true, length = 500)
+    var cancelReason: String? = null,
+
     @Column(nullable = false, precision = 15, scale = 2)
     var totalAmount: BigDecimal = BigDecimal.ZERO,
 
@@ -72,11 +75,12 @@ class Order(
     /**
      * 주문 취소 (SAGA 보상 트랜잭션)
      */
-    fun cancel() {
+    fun cancel(reason: String? = null) {
         check(status == OrderStatus.PENDING || status == OrderStatus.PAID) {
             "취소 불가능한 상태입니다. 현재 상태: $status"
         }
         this.status = OrderStatus.CANCELLED
+        this.cancelReason = reason
         this.updatedAt = LocalDateTime.now()
     }
 
