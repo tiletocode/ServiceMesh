@@ -1,5 +1,6 @@
 package com.jwjang.product.infrastructure.config
 
+
 import org.springframework.cache.annotation.EnableCaching
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
