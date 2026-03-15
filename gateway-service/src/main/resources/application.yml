@@ -1,0 +1,99 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      routes:
+        # ── Admin Reset Routes (specific paths first) ───────────
+        # nginx의 RewritePath: /api/v1/admin/reset/{service} → /api/v1/admin/reset
+        - id: admin-reset-member
+          uri: http://member-service:8081
+          predicates:
+            - Path=/api/v1/admin/reset/member
+          filters:
+            - RewritePath=/api/v1/admin/reset/member, /api/v1/admin/reset
+
+        - id: admin-reset-product
+          uri: http://product-service:8082
+          predicates:
+            - Path=/api/v1/admin/reset/product
+          filters:
+            - RewritePath=/api/v1/admin/reset/product, /api/v1/admin/reset
+
+        - id: admin-reset-order
+          uri: http://order-service:8083
+          predicates:
+            - Path=/api/v1/admin/reset/order
+          filters:
+            - RewritePath=/api/v1/admin/reset/order, /api/v1/admin/reset
+
+        - id: admin-reset-payment
+          uri: http://payment-service:8084
+          predicates:
+            - Path=/api/v1/admin/reset/payment
+          filters:
+            - RewritePath=/api/v1/admin/reset/payment, /api/v1/admin/reset
+
+        - id: admin-reset-shipping
+          uri: http://shipping-service:8085
+          predicates:
+            - Path=/api/v1/admin/reset/shipping
+          filters:
+            - RewritePath=/api/v1/admin/reset/shipping, /api/v1/admin/reset
+
+        # ── API Routes ──────────────────────────────────────────
+        - id: member-api
+          uri: http://member-service:8081
+          predicates:
+            - Path=/api/v1/members,/api/v1/members/**
+
+        - id: product-api
+          uri: http://product-service:8082
+          predicates:
+            - Path=/api/v1/products,/api/v1/products/**
+
+        - id: order-api
+          uri: http://order-service:8083
+          predicates:
+            - Path=/api/v1/orders,/api/v1/orders/**
+
+        - id: payment-api
+          uri: http://payment-service:8084
+          predicates:
+            - Path=/api/v1/payments,/api/v1/payments/**
+
+        - id: shipping-api
+          uri: http://shipping-service:8085
+          predicates:
+            - Path=/api/v1/shipments,/api/v1/shipments/**
+
+        # ── Static Content (catch-all) ──────────────────────────
+        # member-service가 SPA(index.html)를 서빙하므로 마지막에 배치
+        - id: member-static
+          uri: http://member-service:8081
+          predicates:
+            - Path=/**
+
+# Eureka: 현재 Docker Compose 환경에서는 비활성화 (Kubernetes 이관 시 lb:// 라우팅으로 전환)
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:false}
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -1,6 +1,7 @@
 rootProject.name = "jwjang-servicemesh"
 
 include(
+    "gateway-service",
     "member-service",
     "product-service",
     "order-service",
