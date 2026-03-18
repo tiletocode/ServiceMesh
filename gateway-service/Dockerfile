@@ -12,4 +12,5 @@ FROM eclipse-temurin:17-jre-alpine
 VOLUME /tmp
 ARG JAR_FILE=/workspace/gateway-service/build/libs/*.jar
 COPY --from=build ${JAR_FILE} app.jar
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+COPY whatap_apm /whatap
+ENTRYPOINT ["java", "-javaagent:/whatap/whatap.agent-2.2.71.jar", "-Dwhatap.oname=gateway", "-jar", "/app.jar"]

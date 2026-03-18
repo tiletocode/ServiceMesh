@@ -70,12 +70,50 @@ spring:
           predicates:
             - Path=/api/v1/shipments,/api/v1/shipments/**
 
-        # ── Static Content (catch-all) ──────────────────────────
-        # member-service가 SPA(index.html)를 서빙하므로 마지막에 배치
+        # ── API Docs (springdoc) ────────────────────────────────
+        - id: apidocs-member
+          uri: http://member-service:8081
+          predicates:
+            - Path=/apidocs/member/**
+          filters:
+            - RewritePath=/apidocs/member/(?<remaining>.*), /${remaining}
+
+        - id: apidocs-product
+          uri: http://product-service:8082
+          predicates:
+            - Path=/apidocs/product/**
+          filters:
+            - RewritePath=/apidocs/product/(?<remaining>.*), /${remaining}
+
+        - id: apidocs-order
+          uri: http://order-service:8083
+          predicates:
+            - Path=/apidocs/order/**
+          filters:
+            - RewritePath=/apidocs/order/(?<remaining>.*), /${remaining}
+
+        - id: apidocs-payment
+          uri: http://payment-service:8084
+          predicates:
+            - Path=/apidocs/payment/**
+          filters:
+            - RewritePath=/apidocs/payment/(?<remaining>.*), /${remaining}
+
+        - id: apidocs-shipping
+          uri: http://shipping-service:8085
+          predicates:
+            - Path=/apidocs/shipping/**
+          filters:
+            - RewritePath=/apidocs/shipping/(?<remaining>.*), /${remaining}
+
+        # ── Static Content (SPA) ────────────────────────────────
+        # SPA(index.html)는 CDN 기반이므로 루트 경로만 member-service로 라우팅
+        # catch-all(/**)을 쓰면 /swagger-ui/**, /webjars/** 등을 member-service로 넘겨
+        # Spring Security가 403을 반환하므로 명시적 경로만 지정
         - id: member-static
           uri: http://member-service:8081
           predicates:
-            - Path=/**
+            - Path=/, /index.html, /favicon.ico
 
 # Eureka: 현재 Docker Compose 환경에서는 비활성화 (Kubernetes 이관 시 lb:// 라우팅으로 전환)
 eureka:
@@ -85,6 +123,24 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
+
+# springdoc: gateway Swagger UI에서 5개 서비스 API 통합
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: member-service
+        url: /apidocs/member/v3/api-docs
+      - name: product-service
+        url: /apidocs/product/v3/api-docs
+      - name: order-service
+        url: /apidocs/order/v3/api-docs
+      - name: payment-service
+        url: /apidocs/payment/v3/api-docs
+      - name: shipping-service
+        url: /apidocs/shipping/v3/api-docs
+  api-docs:
+    enabled: false   # gateway 자체 api-docs는 비활성화
 
 management:
   endpoints:

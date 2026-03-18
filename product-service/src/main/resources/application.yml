@@ -49,3 +49,13 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+  info:
+    title: Product Service API
+    version: v1
+    description: 상품·SKU 조회 및 등록, 재고 관리 API (Redis 케시)

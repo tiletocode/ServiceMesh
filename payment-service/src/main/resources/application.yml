@@ -52,3 +52,13 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+  info:
+    title: Payment Service API
+    version: v1
+    description: 결제 처리 API (Kafka 이벤트 기반 동작, REST 친 Admin Reset 전용)

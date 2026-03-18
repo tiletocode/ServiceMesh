@@ -46,3 +46,13 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false   # 개별 서비스 UI 비활성화, gateway에서 통합 제공
+  info:
+    title: Member Service API
+    version: v1
+    description: 회원 가입, 로김, 정보 관리 API

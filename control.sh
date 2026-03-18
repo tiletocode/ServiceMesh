@@ -3,13 +3,14 @@
 # MSA 서비스 기동·중지·상태 통합 스크립트
 #
 # 사용법:
-#   ./control.sh              # 빌드 + 전체 기동
-#   ./control.sh --no-build   # 빌드 없이 기동 (이미지 재사용)
-#   ./control.sh --stop       # 전체 중지 (앱 + 인프라)
-#   ./control.sh --down       # 앱만 중지 (인프라 유지)
-#   ./control.sh --restart    # Kafka 안전 재시작
-#   ./control.sh --status     # 상태 확인
-#   ./control.sh --test       # 빌드 + 기동 + E2E 테스트
+#   ./control.sh --start   # 빌드 없이 기동 (기본, 이미지 재사용)
+#   ./control.sh --build   # Gradle 빌드 + Docker 이미지 생성만 (기동 하지 않음)
+#   ./control.sh --bst     # 빌드 + 기동 + E2E 테스트 일괄 실행
+#   ./control.sh --stop    # 전체 중지 (앱 + 인프라)
+#   ./control.sh --down    # 앱만 중지 (인프라 유지)
+
+#   ./control.sh --status  # 상태 확인
+#   ./control.sh --test    # 테스트만 실행 (서비스 기동 중일 때)
 # ================================================================
 set -euo pipefail
 
@@ -20,19 +21,18 @@ cd "$DIR"
 RUN_TEST=false
 DO_DOWN=false
 DO_STOP=false
-DO_RESTART=false
-NO_BUILD=false
+DO_BUILD=false
 DO_STATUS=false
 DO_START=false
 for arg in "$@"; do
   case $arg in
-    --start)    DO_START=true ;;
-    --test)     RUN_TEST=true ;;
-    --down)     DO_DOWN=true ;;
-    --stop)     DO_STOP=true ;;
-    --restart)  DO_RESTART=true ;;
-    --no-build) NO_BUILD=true ;;
-    --status)   DO_STATUS=true ;;
+    --start)   DO_START=true ;;
+    --build)   DO_BUILD=true ;;
+    --bst)     DO_BUILD=true; DO_START=true; RUN_TEST=true ;;
+    --test)    RUN_TEST=true ;;
+    --down)    DO_DOWN=true ;;
+    --stop)    DO_STOP=true ;;
+    --status)  DO_STATUS=true ;;
   esac
 done
 
@@ -41,19 +41,19 @@ if [[ $# -eq 0 ]]; then
   echo ""
   echo -e "\033[0;36m사용법: ./control.sh <옵션>\033[0m"
   echo ""
-  echo "  --start            인프라 + 앱 빌드 & 전체 기동"
-  echo "  --start --no-build 빌드 없이 기동 (이미지 재사용)"
-  echo "  --start --test     기동 후 E2E 테스트 실행"
-  echo "  --stop             전체 중지 (앱 + 인프라)"
-  echo "  --down             앱만 중지 (인프라 유지)"
-  echo "  --restart          Kafka 안전 재시작"
-  echo "  --status           컨테이너 상태 확인"
+  echo "  --start    빌드 없이 기동 (기본, 이미지 재사용)"
+  echo "  --build    Gradle 빌드 + Docker 이미지 생성만 (기동 하지 않음)"
+  echo "  --bst      빌드 + 기동 + E2E 테스트 일괄 실행"
+  echo "  --test     테스트만 실행 (서비스 기동 중일 때)"
+  echo "  --stop     전체 중지 (앱 + 인프라)"
+  echo "  --down     앱만 중지 (인프라 유지)"
+  echo "  --status   컨테이너 상태 확인"
   echo ""
   exit 0
 fi
 
-# ── --start 없이 기동 옵션만 넘긴 경우 안내 ───────────────────
-if ! $DO_START && ! $DO_STOP && ! $DO_DOWN && ! $DO_RESTART && ! $DO_STATUS; then
+# ── 알 수 없는 옵션 탐지 ─────────────────────────────────
+if ! $DO_START && ! $DO_BUILD && ! $DO_STOP && ! $DO_DOWN && ! $DO_STATUS && ! $RUN_TEST; then
   echo -e "\033[1;33m  ⚠️  알 수 없는 옵션입니다. 인수 없이 실행하면 사용법을 확인할 수 있습니다.\033[0m"
   exit 1
 fi
@@ -128,27 +128,16 @@ wait_health() {
   fail "$name 헬스체크 타임아웃 — docker compose logs $name 으로 확인하세요"
 }
 
-# ── --start 없이는 기동 로직 진입 불가 ───────────────────────
-if ! $DO_START && ! $DO_RESTART; then
-  exit 0
-fi
-
-# ── --restart: Zookeeper NodeExists 문제 없이 안전 재시작 ──────
-if $DO_RESTART; then
-  info "서비스 안전 재시작 중 (Zookeeper → Kafka → 앱 순서)..."
-  docker compose stop kafka order-service payment-service shipping-service member-service product-service gateway-service
-  docker compose stop zookeeper
-  docker compose start zookeeper
-  sleep 8
-  docker compose start kafka
-  sleep 10
-  docker compose start member-service product-service order-service payment-service shipping-service
-  docker compose restart gateway-service
-  info "헬스체크 중..."
-  wait_health "member-service"   "http://localhost:8081/actuator/health"
-  wait_health "order-service"    "http://localhost:8083/actuator/health"
-  wait_health "gateway-service"  "http://localhost:8080/actuator/health"
-  ok "재시작 완료"
+# ── --start·--build·--bst 없이는 기동/빌드 로직 진입 불가 ───────────────
+if ! $DO_START && ! $DO_BUILD; then
+  # --test 단독: 서비스 기동 없이 테스트만 실행
+  if $RUN_TEST; then
+    GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
+    echo -e "${CYAN}▶ E2E 테스트 실행 (test-api.sh)${NC}"
+    chmod +x test-api.sh
+    bash test-api.sh
+    exit 0
+  fi
   exit 0
 fi
 
@@ -178,14 +167,14 @@ echo -e " ${GREEN}[UP]${NC}"
 ok "인프라 준비 완료"
 echo ""
 
-# ── STEP 2: 서비스 빌드 & 기동 ─────────────────────────────────
-if $NO_BUILD; then
-  info "STEP 2/3  마이크로서비스 기동 (빌드 생략)"
-  docker compose up -d \
-    member-service product-service order-service payment-service shipping-service gateway-service
-else
+# ── STEP 2: 서비스 빌드 or 기동 ────────────────────────────────
+if $DO_BUILD; then
   info "STEP 2/3  마이크로서비스 빌드 & 기동 (첫 빌드는 5~10분 소요)"
   docker compose up -d --build \
+    member-service product-service order-service payment-service shipping-service gateway-service
+else
+  info "STEP 2/3  마이크로서비스 기동 (빌드 생략, 기존 이미지 사용)"
+  docker compose up -d \
     member-service product-service order-service payment-service shipping-service gateway-service
 fi
 
@@ -205,12 +194,12 @@ if $RUN_TEST; then
   chmod +x test-api.sh
   bash test-api.sh
 else
-  echo -e "${YELLOW}💡 빌드 없이 재기동:   ./control.sh --no-build${NC}"
-  echo -e "${YELLOW}💡 E2E 테스트 실행:    ./control.sh --test${NC}"
-  echo -e "${YELLOW}💡 Kafka 안전 재시작:  ./control.sh --restart${NC}"
+  echo -e "${YELLOW}💡 빌드 후 재기동:          ./control.sh --build && ./control.sh --start${NC}"
+  echo -e "${YELLOW}💡 빌드+기동+테스트 일괄:   ./control.sh --bst${NC}"
+  echo -e "${YELLOW}💡 E2E 테스트 실행:         ./control.sh --test${NC}"
   echo -e "${YELLOW}💡 앱만 중지 (인프라 유지): ./control.sh --down${NC}"
   echo -e "${YELLOW}💡 전체 중지 (앱+인프라):   ./control.sh --stop${NC}"
-  echo -e "${YELLOW}💡 상태 확인:          ./control.sh --status${NC}"
+  echo -e "${YELLOW}💡 상태 확인:               ./control.sh --status${NC}"
 fi
 
 echo ""

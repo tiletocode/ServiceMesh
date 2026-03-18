@@ -50,6 +50,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/v1/members/login").permitAll()
                     .requestMatchers("/actuator/**").permitAll()
                     .requestMatchers("/", "/index.html", "/static/**").permitAll()
+                    .requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(

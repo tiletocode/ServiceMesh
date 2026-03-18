@@ -56,3 +56,13 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+  info:
+    title: Order Service API
+    version: v1
+    description: 주문 생성·조회·취소 API (SAGA 분산 트랜젝션)
